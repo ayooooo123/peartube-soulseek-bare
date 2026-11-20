@@ -13,6 +13,14 @@ if(NOT BARE_ADDON)
   return()
 endif()
 
+# Ensure ${CMAKE_BINARY_DIR}/_bare/package.json exists before cmake-bare calls
+# install_node_module(bare-headers), otherwise npm walks up to the repo root
+# package.json and --force prunes devDependencies from root node_modules/.
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/_bare/package.json")
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/_bare")
+  file(WRITE "${CMAKE_BINARY_DIR}/_bare/package.json" "{}\n")
+endif()
+
 # Map Bare target (<platform>-<arch>) to Rust target triple
 if(NOT DEFINED RUST_TARGET)
   if(target STREQUAL "darwin-arm64")

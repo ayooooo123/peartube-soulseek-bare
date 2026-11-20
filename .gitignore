@@ -2,6 +2,7 @@ node_modules/
 target/
 build/
 build-*/
-prebuilds/
+# Prebuilds ARE tracked: a clean clone and the relay image both need a loadable addon.
+# Build with scripts/build.sh <target>; CI refreshes them.
 .DS_Store
 *.part

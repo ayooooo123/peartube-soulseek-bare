@@ -257,7 +257,11 @@ static_lib="$cargo_dir/$triple/release/libpeartube_soulseek_bare_ffi.a"
 inc_dir="$cargo_dir/include"
 
 echo "==> [2/2] cmake configure & build ($target, CC=$c_compiler)"
-# Ensure node_modules/.bin/cmake-bare / npm helpers are on PATH when cmake-bare downloads bare-headers
+# Pre-create $cmake_dir/_bare/package.json BEFORE cmake runs so cmake-npm's
+# install_node_module(bare-headers) stays inside $cmake_dir/_bare instead of
+# walking up to $repo/package.json and mutating $repo/node_modules.
+mkdir -p "$cmake_dir/_bare"
+[ -f "$cmake_dir/_bare/package.json" ] || printf '{}\n' > "$cmake_dir/_bare/package.json"
 PATH="$cmake_prefix/.bin:$PATH" cmake -S "$repo" -B "$cmake_dir" \
   -DCMAKE_BUILD_TYPE=Release \
   "-DCMAKE_PREFIX_PATH=$cmake_prefix" \
