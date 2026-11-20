@@ -12,4 +12,4 @@ crate-type = ["staticlib"]
 path = "src/lib.rs"
 
 [dependencies]
-peartube-soulseek = { git = "https://github.com/ayooooo123/peartube-soulseek.git", rev = "026b2e1ca3c6c77cd5062ca05b87cfabd12d9b8c" }
+peartube-soulseek = { git = "https://github.com/ayooooo123/peartube-soulseek.git", rev = "cc9b2fb3dbfc4e4e756e1c8e8932a65adf04fe85" }
