@@ -34,8 +34,8 @@ jobs:
       - name: Verify file machine type & load addon
         run: |
           file prebuilds/darwin-arm64/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "Mach-O 64-bit dynamically linked shared library arm64"
-          ./node_modules/.bin/bare -e "console.log(Object.keys(require('./binding.js')).join(','))"
-          ./node_modules/.bin/bare test/addon.test.js
+          node ./node_modules/bare/bin/bare -e "console.log(Object.keys(require('./binding.js')).join(','))"
+          node ./node_modules/bare/bin/bare test/addon.test.js
       - uses: actions/upload-artifact@v4
         with:
           name: prebuild-darwin-arm64

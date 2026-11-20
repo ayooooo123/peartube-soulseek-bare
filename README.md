@@ -6,7 +6,7 @@ PearTube's relay runs `bare` as PID 1 inside a distroless image with no `/bin/sh
 
 ## Crate & Dependency Decision
 
-- **Linkage route chosen:** **Pinned Cargo git dependency (`rev = "1cee3df7f8c41ea7dbeb755ef8a0e03f4e5c9827"`)** on `https://github.com/ayooooo123/peartube-soulseek.git` (MIT license).
+- **Linkage route chosen:** **Pinned Cargo git dependency (`rev = "026b2e1ca3c6c77cd5062ca05b87cfabd12d9b8c"`)** on `https://github.com/ayooooo123/peartube-soulseek.git` (MIT license).
 - **Why:**
   1. Zero code duplication between repos: `src/lib.rs` is a single line (`pub use peartube_soulseek::ffi::*;`) compiled as `crate-type = ["staticlib"]`, and `build.rs` reads `DEP_PEARTUBE_SOULSEEK_INCLUDE` from `peartube-soulseek`'s `links = "peartube_soulseek"` metadata to stage `soulseek.h` into `CARGO_TARGET_DIR/include/soulseek.h` for `soulseek/addon.c`.
   2. Pinning by exact git commit SHA (`rev`) + committed `Cargo.lock` guarantees reproducible offline builds after `cargo fetch` and lets `cargo build --release --target <triple>` cross-compile the entire pure-Rust stack (`md-5 = "=0.10.6"`, `flate2 = "=1.1.2"` `rust_backend`, `parking_lot = "=0.12.5"`) in one step without CMake needing separate archive download rules.
@@ -43,15 +43,15 @@ test/
 
 ## Platform Support & Prebuild Status
 
-`prebuilds/` is **gitignored by design** (`git ls-files | grep prebuilds` is empty) so binary `.bare` shared objects never bloat git history. Instead, GitHub Actions (`.github/workflows/ci.yml`) builds and verifies every target on push and publishes `.bare` artifacts (and GitHub Release assets on `v*` tags).
+`prebuilds/<target>/peartube-soulseek-bare.bare` is tracked in git so a clean clone and the PearTube relay image always have a loadable addon without needing Rust or the Android NDK installed, and GitHub Actions (`.github/workflows/ci.yml`) also builds, load-tests, and publishes fresh `.bare` artifacts (plus GitHub Release assets on `v*` tags) on every push.
 
-| Target | Status | `file prebuilds/<target>/peartube-soulseek-bare.bare` | How Verified / Load-Tested |
-|---|---|---|---|
-| `darwin-arm64` | `built+tested` | `Mach-O 64-bit dynamically linked shared library arm64` | `./node_modules/.bin/bare -e "console.log(Object.keys(require('./binding.js')).join(','))"` + `bare test/addon.test.js` on macOS arm64 |
-| `linux-x64` | `built+tested` | `ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked` | Built against Debian 12 glibc 2.36; load-tested (`bare -e` exports + `test/addon.test.js`) inside `gcr.io/distroless/cc-debian12` via `docker run --platform linux/amd64` |
-| `linux-arm64` | `built+tested` | `ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked` | Built against Debian 12 glibc 2.36; load-tested (`bare -e` exports + `test/addon.test.js`) inside `gcr.io/distroless/cc-debian12` via `docker run --platform linux/arm64` |
-| `android-arm64` | `built+tested` | `ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked` | Built with Android NDK r29 (`aarch64-linux-android29-clang`, 16 KiB `PT_LOAD` page alignment); load-tested (`bare -e` exports + `test/addon.test.js`) on physical Pixel 5a (`arm64-v8a`) under `bare-runtime-android-arm64` |
-| `darwin-x64` | `recipe only` | `Mach-O 64-bit dynamically linked shared library x86_64` | Supported by `sh scripts/build.sh darwin-x64` on macOS with `rustup target add x86_64-apple-darwin` |
+| Target | Status | `peartube-soulseek` rev | `file -b prebuilds/<target>/peartube-soulseek-bare.bare` | How Verified / Load-Tested |
+|---|---|---|---|---|
+| `linux-arm64` | `built+tested` | `026b2e1ca3c6…` | `ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked` | Built against Debian 12 glibc 2.36; load-tested in `peartube-album:c594b30` (`Bare 1.36.0`) + `gcr.io/distroless/cc-debian12` (`test/addon.test.js` E2E) |
+| `linux-x64` | `built+tested` | `026b2e1ca3c6…` | `ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked` | Built against Debian 12 glibc 2.36; load-tested (`load.cjs` + `test/addon.test.js` E2E) inside `gcr.io/distroless/cc-debian12` (`linux/amd64`) |
+| `android-arm64` | `built+tested` | `026b2e1ca3c6…` | `ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked` | Built with Android NDK r29 (`aarch64-linux-android29-clang`, 16 KiB `PT_LOAD` page alignment); load-tested (`bare -e` + `test/addon.test.js` E2E) on physical Pixel 5a (`arm64-v8a`) |
+| `darwin-arm64` | `built+tested` | `026b2e1ca3c6…` | `Mach-O 64-bit dynamically linked shared library arm64` | Load-tested under `Bare 1.36.0` & `Bare 1.37.1` + `bare test/addon.test.js` E2E on macOS arm64 |
+| `darwin-x64` | `recipe only` | `026b2e1ca3c6…` | `Mach-O 64-bit dynamically linked shared library x86_64` | Supported by `sh scripts/build.sh darwin-x64` on macOS with `rustup target add x86_64-apple-darwin` |
 
 ## Getting Prebuilds (Release Artifact vs Local Build)
 
