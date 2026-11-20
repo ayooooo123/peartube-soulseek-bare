@@ -1,0 +1,10 @@
+{
+  "name": "peartube-soulseek-js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bare JS wrapper over the peartube-soulseek native addon",
+  "main": "index.js",
+  "engines": {
+    "bare": ">=1.16.0"
+  }
+}

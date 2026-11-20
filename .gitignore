@@ -1,0 +1,7 @@
+node_modules/
+target/
+build/
+build-*/
+prebuilds/
+.DS_Store
+*.part

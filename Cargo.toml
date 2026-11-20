@@ -1,0 +1,15 @@
+[package]
+name = "peartube-soulseek-bare-ffi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Staticlib linkage wrapper re-exporting peartube-soulseek C ABI for the Bare addon"
+
+[lib]
+name = "peartube_soulseek_bare_ffi"
+crate-type = ["staticlib"]
+path = "src/lib.rs"
+
+[dependencies]
+peartube-soulseek = { git = "https://github.com/ayooooo123/peartube-soulseek.git", rev = "1cee3df7f8c41ea7dbeb755ef8a0e03f4e5c9827" }
