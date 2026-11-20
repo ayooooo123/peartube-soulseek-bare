@@ -1,0 +1,199 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  darwin-arm64:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci --no-audit --no-fund
+      - name: Build darwin-arm64 prebuild
+        run: sh scripts/build.sh darwin-arm64
+      - name: Verify file machine type & load addon
+        run: |
+          file prebuilds/darwin-arm64/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "Mach-O 64-bit dynamically linked shared library arm64"
+          ./node_modules/.bin/bare -e "console.log(Object.keys(require('./binding.js')).join(','))"
+          ./node_modules/.bin/bare test/addon.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-darwin-arm64
+          path: prebuilds/darwin-arm64/peartube-soulseek-bare.bare
+          if-no-files-found: error
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+            docker_platform: linux/amd64
+            file_match: 'ELF 64-bit LSB shared object, x86-64'
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            docker_platform: linux/arm64
+            file_match: 'ELF 64-bit LSB shared object, ARM aarch64'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.target }} prebuild in Debian 12 (glibc 2.36)
+        run: |
+          docker run --rm --platform ${{ matrix.docker_platform }} \
+            -v "$PWD:/work" -w /work \
+            node:22-bookworm-slim \
+            sh -ceu '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y --no-install-recommends ca-certificates curl git build-essential cmake pkg-config file >/dev/null
+              export RUSTUP_HOME=/tmp/rustup CARGO_HOME=/tmp/cargo
+              curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable >/dev/null 2>&1
+              export PATH="/tmp/cargo/bin:$PATH"
+              npm ci --ignore-scripts --no-audit --no-fund >/dev/null
+              BUILD_IN_DOCKER=0 sh scripts/build.sh "${{ matrix.target }}"
+            '
+      - name: Verify file machine type
+        run: |
+          file prebuilds/${{ matrix.target }}/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "${{ matrix.file_match }}"
+      - name: Load-test & run E2E in distroless Debian 12 (glibc)
+        run: |
+          printf 'node_modules\nbuild-*\ntarget\n.git\n' > .dockerignore
+          docker build --platform ${{ matrix.docker_platform }} -t slsk-probe-${{ matrix.target }} -f - . <<'EOF'
+          FROM docker.io/library/node:22-bookworm-slim AS deps
+          WORKDIR /app
+          COPY package.json package-lock.json ./
+          RUN npm ci --no-audit --no-fund \
+            && PLATFORM=$(basename node_modules/bare-runtime-linux-* | sed 's/^bare-runtime-//') \
+            && mv node_modules/bare-runtime-$PLATFORM/bin/bare /bare && chmod +x /bare
+          FROM gcr.io/distroless/cc-debian12
+          COPY --from=deps /bare /usr/local/bin/bare
+          WORKDIR /app
+          COPY package.json binding.js ./
+          COPY js ./js
+          COPY test ./test
+          COPY --from=deps /app/node_modules ./node_modules
+          COPY prebuilds/${{ matrix.target }} ./prebuilds/${{ matrix.target }}
+          ENTRYPOINT ["/usr/local/bin/bare"]
+          EOF
+          rm -f .dockerignore
+          docker run --rm --platform ${{ matrix.docker_platform }} slsk-probe-${{ matrix.target }} -e "console.log(Object.keys(require('./binding.js')).join(','))"
+          docker run --rm --platform ${{ matrix.docker_platform }} slsk-probe-${{ matrix.target }} test/addon.test.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ matrix.target }}
+          path: prebuilds/${{ matrix.target }}/peartube-soulseek-bare.bare
+          if-no-files-found: error
+
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r29
+          add-to-path: false
+      - run: npm ci --no-audit --no-fund
+      - name: Build android-arm64 prebuild
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: sh scripts/build.sh android-arm64
+      - name: Verify ELF machine type, exported BARE_MODULE symbols & 16 KiB page alignment
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          file prebuilds/android-arm64/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "ELF 64-bit LSB shared object, ARM aarch64"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -l prebuilds/android-arm64/peartube-soulseek-bare.bare | grep -Eq 'LOAD .*0x4000'
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm" -D --defined-only prebuilds/android-arm64/peartube-soulseek-bare.bare | grep -q 'bare_register_module_v0'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-android-arm64
+          path: prebuilds/android-arm64/peartube-soulseek-bare.bare
+          if-no-files-found: error
+
+  bundle-prebuilds:
+    needs: [darwin-arm64, linux, android-arm64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all target prebuilds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: prebuild-*
+          path: staged
+      - name: Assemble prebuilds/ tree and SHA256SUMS.txt
+        run: |
+          set -eu
+          mkdir -p dist/prebuilds
+          for t in darwin-arm64 linux-x64 linux-arm64 android-arm64; do
+            mkdir -p "dist/prebuilds/$t"
+            cp "staged/prebuild-$t/peartube-soulseek-bare.bare" "dist/prebuilds/$t/peartube-soulseek-bare.bare"
+            cp "staged/prebuild-$t/peartube-soulseek-bare.bare" "dist/peartube-soulseek-bare-$t.bare"
+            file "dist/prebuilds/$t/peartube-soulseek-bare.bare"
+          done
+          tar -C dist -czf dist/peartube-soulseek-bare-prebuilds.tar.gz prebuilds
+          (cd dist && sha256sum peartube-soulseek-bare-*.bare peartube-soulseek-bare-prebuilds.tar.gz > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilds
+          path: |
+            dist/prebuilds/**/peartube-soulseek-bare.bare
+            dist/peartube-soulseek-bare-prebuilds.tar.gz
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish GitHub Release on v* tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" --clobber \
+              dist/peartube-soulseek-bare-darwin-arm64.bare \
+              dist/peartube-soulseek-bare-linux-x64.bare \
+              dist/peartube-soulseek-bare-linux-arm64.bare \
+              dist/peartube-soulseek-bare-android-arm64.bare \
+              dist/peartube-soulseek-bare-prebuilds.tar.gz \
+              dist/SHA256SUMS.txt
+          else
+            gh release create "$tag" --generate-notes \
+              dist/peartube-soulseek-bare-darwin-arm64.bare \
+              dist/peartube-soulseek-bare-linux-x64.bare \
+              dist/peartube-soulseek-bare-linux-arm64.bare \
+              dist/peartube-soulseek-bare-android-arm64.bare \
+              dist/peartube-soulseek-bare-prebuilds.tar.gz \
+              dist/SHA256SUMS.txt
+          fi
