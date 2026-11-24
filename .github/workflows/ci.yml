@@ -17,7 +17,7 @@ concurrency:
 jobs:
   darwin-arm64:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,20 +26,35 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,aarch64-apple-ios,aarch64-apple-ios-sim
       - uses: Swatinem/rust-cache@v2
       - run: npm ci --no-audit --no-fund
-      - name: Build darwin-arm64 prebuild
-        run: sh scripts/build.sh darwin-arm64
+      - name: Build darwin-arm64, ios-arm64, and ios-arm64-simulator prebuilds
+        run: |
+          sh scripts/build.sh darwin-arm64
+          sh scripts/build.sh ios-arm64
+          sh scripts/build.sh ios-arm64-simulator
       - name: Verify file machine type & load addon
         run: |
           file prebuilds/darwin-arm64/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "Mach-O 64-bit dynamically linked shared library arm64"
+          file prebuilds/ios-arm64/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "Mach-O 64-bit dynamically linked shared library arm64"
+          file prebuilds/ios-arm64-simulator/peartube-soulseek-bare.bare | tee /dev/stderr | grep -q "Mach-O 64-bit dynamically linked shared library arm64"
           node ./node_modules/bare/bin/bare -e "console.log(Object.keys(require('./binding.js')).join(','))"
           node ./node_modules/bare/bin/bare test/addon.test.js
       - uses: actions/upload-artifact@v4
         with:
           name: prebuild-darwin-arm64
           path: prebuilds/darwin-arm64/peartube-soulseek-bare.bare
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-ios-arm64
+          path: prebuilds/ios-arm64/peartube-soulseek-bare.bare
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-ios-arm64-simulator
+          path: prebuilds/ios-arm64-simulator/peartube-soulseek-bare.bare
           if-no-files-found: error
 
   linux:
@@ -157,7 +172,7 @@ jobs:
         run: |
           set -eu
           mkdir -p dist/prebuilds
-          for t in darwin-arm64 linux-x64 linux-arm64 android-arm64; do
+          for t in darwin-arm64 ios-arm64 ios-arm64-simulator linux-x64 linux-arm64 android-arm64; do
             mkdir -p "dist/prebuilds/$t"
             cp "staged/prebuild-$t/peartube-soulseek-bare.bare" "dist/prebuilds/$t/peartube-soulseek-bare.bare"
             cp "staged/prebuild-$t/peartube-soulseek-bare.bare" "dist/peartube-soulseek-bare-$t.bare"

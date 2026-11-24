@@ -121,6 +121,24 @@ case "$target" in
     set -- -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_OSX_ARCHITECTURES=x86_64 "-DCMAKE_C_COMPILER=$c_compiler"
     ;;
 
+  ios-arm64)
+    [ "$host_os" = "Darwin" ] || { echo "error: $target requires a macOS host" >&2; exit 1; }
+    triple=aarch64-apple-ios
+    sdk_path=$(xcrun --sdk iphoneos --show-sdk-path)
+    c_compiler=$(xcrun --sdk iphoneos --find clang)
+    export IPHONEOS_DEPLOYMENT_TARGET=17.0
+    set -- -DCMAKE_SYSTEM_NAME=iOS "-DCMAKE_OSX_SYSROOT=$sdk_path" -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 "-DCMAKE_C_COMPILER=$c_compiler"
+    ;;
+
+  ios-arm64-simulator)
+    [ "$host_os" = "Darwin" ] || { echo "error: $target requires a macOS host" >&2; exit 1; }
+    triple=aarch64-apple-ios-sim
+    sdk_path=$(xcrun --sdk iphonesimulator --show-sdk-path)
+    c_compiler=$(xcrun --sdk iphonesimulator --find clang)
+    export IPHONEOS_DEPLOYMENT_TARGET=17.0
+    set -- -DCMAKE_SYSTEM_NAME=iOS "-DCMAKE_OSX_SYSROOT=$sdk_path" -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 "-DCMAKE_C_COMPILER=$c_compiler"
+    ;;
+
   linux-x64)
     triple=x86_64-unknown-linux-gnu
     use_docker=${BUILD_IN_DOCKER:-auto}

@@ -138,7 +138,7 @@ dependencies = [
 [[package]]
 name = "peartube-soulseek"
 version = "0.1.0"
-source = "git+https://github.com/ayooooo123/peartube-soulseek.git?rev=cc9b2fb3dbfc4e4e756e1c8e8932a65adf04fe85#cc9b2fb3dbfc4e4e756e1c8e8932a65adf04fe85"
+source = "git+https://github.com/ayooooo123/peartube-soulseek.git?rev=e33706c454d9639364ba22ac89b4d6a9b82a661a#e33706c454d9639364ba22ac89b4d6a9b82a661a"
 dependencies = [
  "flate2",
  "md-5",
